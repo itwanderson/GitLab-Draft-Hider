@@ -100,13 +100,16 @@
     var status = (input && input.status) || 0;
     var contentType = (input && input.contentType) || '';
     var body = (input && input.body) || '';
-    if (/text\/html/i.test(contentType)) {
-      return { kind: 'signed-out', message: 'GitLab answered with a page instead of data — the session is not signed in.' };
-    }
     if (status === 401) return { kind: 'signed-out', message: 'GitLab rejected the request: not signed in.' };
     if (status === 403) return { kind: 'forbidden', message: 'GitLab refused this project or group for the current account.' };
     if (status === 429) return { kind: 'rate-limited', message: 'GitLab rate-limited the request; keeping the page-only result.' };
     if (status >= 500) return { kind: 'network', message: 'GitLab had a server error.' };
+    // A signed-out fetch follows the redirect to the sign-in page and comes back
+    // as HTML with a 200, so this check comes after the status checks: a 500 HTML
+    // page is a server error, not an expired session.
+    if (/text\/html/i.test(contentType)) {
+      return { kind: 'signed-out', message: 'GitLab answered with a page instead of data — the session is not signed in.' };
+    }
     if (typeof body === 'string' && body.indexOf('"errors"') !== -1) {
       return { kind: 'schema', message: 'GitLab rejected the query — its schema has moved.' };
     }

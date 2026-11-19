@@ -8,8 +8,12 @@
   var GDHHosts = root.GDHHosts;
   var GDHDom = root.GDHDom;
   var GDHReconcile = root.GDHReconcile;
+  var GDHGraphql = root.GDHGraphql;
 
   var BOOT_DELAY = 150;
+  var CACHE_MS = 60000;
+  var cache = new Map();
+  var myUsername = null;
   var generation = 0;
   var lastHref = null;
   var observer = null;
@@ -93,6 +97,66 @@
     if (ui.tab) ui.tab.setCount(lastItems.length);
   }
 
+  async function fetchHidden(deps, base, parsed, cfg) {
+    var meta = deps.doc.querySelector('meta[name="csrf-token"]');
+    var token = meta && meta.getAttribute('content');
+    if (!token) return { ok: false, reason: 'signed-out' };
+
+    var key = base.origin + base.prefix + '|' + parsed.path + '|' + JSON.stringify(parsed.filters || {});
+    var hit = cache.get(key);
+    if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+
+    var fetchImpl = deps.fetchImpl || function (url, init) { return fetch(url, init); };
+    var client = GDHGraphql.createClient({
+      fetchImpl: fetchImpl,
+      endpoint: GDHHosts.graphqlUrl(base),
+      csrfToken: token,
+      maxPages: 10,
+    });
+
+    var value;
+    try {
+      if (parsed.filters && parsed.filters.scope && !myUsername) myUsername = await client.fetchUsername();
+      var result = await client.fetchAll({
+        path: parsed.path,
+        filters: parsed.filters || {},
+        me: myUsername,
+      });
+      value = result.scope
+        ? { ok: true, entries: result.entries, truncated: result.truncated }
+        : { ok: false, reason: 'signed-out' };
+      if (value.ok) cache.set(key, { at: Date.now(), value: value });
+    } catch (e) {
+      value = { ok: false, reason: e && e.kind === 'signed-out' ? 'signed-out' : 'error' };
+    }
+    return value;
+  }
+
+  function renderFull(deps, page, session, parsed, cfg) {
+    var merged = GDHReconcile.merge(
+      page,
+      GDHReconcile.sessionPass(session.entries, cfg),
+      { unknownFilters: parsed.unknownFilters }
+    );
+    lastHide = merged.hide;
+    lastItems = merged.items;
+    applyMarks(lastHide);
+    if (ui.panel) ui.panel.setItems(lastItems);
+    if (ui.tab) ui.tab.setCount(lastItems.length);
+
+    var adjusts = parsed.state === null || parsed.state === 'opened';
+    if (ui.count) {
+      if (adjusts) ui.count.adjust(merged.countDelta);
+      else ui.count.reset();
+    }
+    if (ui.panel) {
+      if (session.truncated) ui.panel.setStatus('Showing the first 1,000 merge requests.');
+      else if (parsed.unknownFilters.length) ui.panel.setStatus('Hidden counts are not adjusted for the filters in this URL.');
+      else ui.panel.setStatus(null);
+    }
+    report(deps, 'full', lastItems.length);
+  }
+
   function baseEnvironment() {
     return {
       doc: typeof document !== 'undefined' ? document : null,
@@ -134,6 +198,20 @@
     var page = GDHReconcile.pagePass(ui.rows.read(), cfg);
     showPagePass(page);
     report(deps, 'page', lastItems.length);
+
+    var session = await fetchHidden(deps, base, parsed, cfg);
+    if (gen !== generation) return;
+    if (session.ok) {
+      renderFull(deps, page, session, parsed, cfg);
+    } else {
+      if (ui.panel) {
+        ui.panel.setStatus(session.reason === 'signed-out'
+          ? 'Signed out — showing the MRs on this page only.'
+          : "GitLab didn't answer — showing the MRs on this page only.");
+      }
+      if (ui.count) ui.count.reset();
+      report(deps, 'page', lastItems.length, session.reason === 'signed-out' ? 'signed-out' : 'error');
+    }
   }
 
   function schedule() {
@@ -151,7 +229,11 @@
   }
 
   function start() {
-    root.GDHRun = { boot: boot, get lastItems() { return lastItems; } };
+    root.GDHRun = {
+    boot: boot,
+    clearCache: function () { cache.clear(); myUsername = null; },
+    get lastItems() { return lastItems; },
+  };
     boot();
     if (!observer && typeof MutationObserver !== 'undefined') {
       observer = new MutationObserver(schedule);
@@ -161,7 +243,11 @@
     window.addEventListener('pagehide', function () { send({ type: 'gdh:status', state: 'idle', hiddenCount: 0 }); });
   }
 
-  root.GDHRun = { boot: boot, get lastItems() { return lastItems; } };
+  root.GDHRun = {
+    boot: boot,
+    clearCache: function () { cache.clear(); myUsername = null; },
+    get lastItems() { return lastItems; },
+  };
 
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
