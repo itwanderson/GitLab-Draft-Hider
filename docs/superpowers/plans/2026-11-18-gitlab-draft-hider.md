@@ -1244,14 +1244,143 @@ git commit -m "feat: popup status and README"
 
 ---
 
+### Task 14: GitHub Actions — test, package, release
+
+**Files:**
+- Create: `.github/workflows/ci.yml`
+- Create: `scripts/package.sh`
+- Create: `.gitignore`
+- Modify: `package.json` (`scripts.package`)
+- Modify: `README.md` (install from a release, build a package locally)
+- Test: `tests/package.test.js`
+
+**Interfaces:**
+- `bash scripts/package.sh <out.zip>` writes a zip whose **root** contains
+  `manifest.json`, `src/`, `icons/` and `README.md`, and nothing else (no tests,
+  docs, node_modules or dotfiles). Uses `python3 -m zipfile -c` so it needs no
+  `zip` binary; the CI runner and any dev machine with python3 can run it.
+- `npm run package` → `bash scripts/package.sh dist/gitlab-draft-hider.zip`.
+- Workflow `ci.yml`: `test` job on `push` and `pull_request` (`npm ci`, `npm test`);
+  `package` job needs `test`, runs on `push` to `main`, `v*` tags and
+  `workflow_dispatch`, uploads the zip with `actions/upload-artifact@v4`, and on a
+  `v*` tag attaches the same zip to a GitHub release with
+  `softprops/action-gh-release@v2`.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+// tests/package.test.js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('packages the extension with manifest.json at the zip root', () => {
+  const out = join(mkdtempSync(join(tmpdir(), 'gdh-')), 'ext.zip');
+  execFileSync('bash', ['scripts/package.sh', out], { stdio: 'pipe' });
+  const listing = execFileSync('unzip', ['-Z1', out], { encoding: 'utf8' }).trim().split('\n');
+  assert.ok(listing.includes('manifest.json'));
+  assert.ok(listing.some(f => f.startsWith('src/content/content.js')));
+  assert.ok(listing.some(f => f.startsWith('icons/')));
+  assert.ok(!listing.some(f => f.startsWith('tests/') || f.startsWith('docs/') || f.startsWith('node_modules/')));
+});
+
+test('the workflow tests, packages, and attaches a release asset on tags', () => {
+  const yml = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.match(yml, /npm ci/);
+  assert.match(yml, /npm test/);
+  assert.match(yml, /actions\/upload-artifact@v4/);
+  assert.match(yml, /softprops\/action-gh-release@v2/);
+  assert.match(yml, /tags:\s*\n\s*-\s*'?v\*'?/);
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `node --test tests/package.test.js`
+Expected: FAIL, ENOENT for `scripts/package.sh`.
+
+- [ ] **Step 3: Implement**
+
+`scripts/package.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+out="${1:-dist/gitlab-draft-hider.zip}"
+mkdir -p "$(dirname "$out")"
+rm -f "$out"
+python3 -m zipfile -c "$out" manifest.json src icons README.md
+echo "wrote $out"
+```
+
+`.gitignore`: `node_modules/`, `dist/`, `.superpowers/`.
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: ci
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  package:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: bash scripts/package.sh dist/gitlab-draft-hider.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: gitlab-draft-hider, path: dist/gitlab-draft-hider.zip }
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with: { files: dist/gitlab-draft-hider.zip }
+```
+
+`package.json` gains `"package": "bash scripts/package.sh dist/gitlab-draft-hider.zip"`.
+README gains "Install from a release" (download the zip, unzip it, load the
+unzipped folder unpacked) and "Package it yourself" (`npm run package`).
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `node --test tests/package.test.js`
+Expected: PASS, 2 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .github scripts .gitignore package.json package-lock.json README.md tests/package.test.js
+git commit -m "ci: test, package and release the extension"
+```
+
 ## Self-Review
 
-**Spec coverage:** intent and surfaces (Tasks 2, 3, 10), base pass (9, 10), session
+**Spec coverage:** intent and surfaces (Tasks 2, 3, 10), packaging and release (14), base pass (9, 10), session
 query and paging bounds (5, 11), reasons (1, 6), Hidden tab and panel (9, 10),
 count correction and its filter caveat (6, 11), degraded states and copy (7, 11),
 icon states and assets (7, 8), narrow permissions and runtime registration (2, 3, 8),
 subpath installs (3, 8, 12), config, labels and import/export (4, 12), no-credential
-stance (5, 11, 12), dark mode and keyboard (9, 12, 13), manual matrix and README (13).
+stance (5, 11, 12), dark mode and keyboard (9, 12, 13), manual matrix and README (13), downloadable
+package and CI (14).
 
 **Known deviation from the spec:** `linkedom` is added as a devDependency so the DOM
 adapter is tested rather than only inspected by eye. Task 1 amends the spec's Testing
