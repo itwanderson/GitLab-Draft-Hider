@@ -15,6 +15,14 @@ test('injects statically only on gitlab.com', () => {
   assert.deepEqual(m.content_scripts.map((c) => c.matches), [['https://gitlab.com/*']]);
 });
 
+test('declares the icon set the service worker swaps between', () => {
+  assert.deepEqual(m.icons, { 48: 'icons/icon-48.png', 128: 'icons/icon-128.png' });
+  assert.deepEqual(m.action.default_icon, { 16: 'icons/icon-16-idle.png', 32: 'icons/icon-32-idle.png' });
+  for (const p of [...Object.values(m.icons), ...Object.values(m.action.default_icon)]) {
+    assert.ok(existsSync(new URL(`../${p}`, import.meta.url)), p);
+  }
+});
+
 test('every referenced file exists, in load order', () => {
   const paths = [
     m.background.service_worker,
