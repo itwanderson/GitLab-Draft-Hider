@@ -93,6 +93,29 @@ test('a revoked grant unregisters that host and forgets it', async () => {
   assert.deepEqual(r.config.hosts, []);
 });
 
+test('remembers the last state for a tab, and forgets it on navigation', async () => {
+  const f = fakes();
+  const h = core.createHandlers(f);
+  let r = await h.onMessage({ type: 'gdh:tab-state', tabId: 7 }, { id: 'self' });
+  assert.equal(r.tab.state, 'idle');
+  await h.onMessage({ type: 'gdh:status', state: 'page', hiddenCount: 4, reason: 'error' }, { tab: { id: 7 }, id: 'self' });
+  r = await h.onMessage({ type: 'gdh:tab-state', tabId: 7 }, { id: 'self' });
+  assert.deepEqual(r.tab, { state: 'page', hiddenCount: 4, reason: 'error' });
+  await h.onUpdated(7, { status: 'loading' });
+  r = await h.onMessage({ type: 'gdh:tab-state', tabId: 7 }, { id: 'self' });
+  assert.equal(r.tab.state, 'idle');
+});
+
+test('exports and imports config through messages', async () => {
+  const f = fakes();
+  const h = core.createHandlers(f);
+  await h.onMessage({ type: 'gdh:add-label', name: 'on-hold' }, { id: 'self' });
+  const exported = await h.onMessage({ type: 'gdh:export-config' }, { id: 'self' });
+  assert.match(exported.json, /on-hold/);
+  assert.deepEqual(await h.onMessage({ type: 'gdh:import-config', json: '{"version":9}' }, { id: 'self' }),
+    { ok: false, error: 'invalid' });
+});
+
 test('pause and config round-trip through the worker', async () => {
   const f = fakes();
   const h = core.createHandlers(f);

@@ -17,6 +17,7 @@
     var tabs = deps.tabs;
     var permissions = deps.permissions;
     var config = GDHConfig.createConfig(deps.area);
+    var tabStates = new Map();
 
     function paint(tabId, state, hiddenCount, reason) {
       var info = GDHIcons.stateFor({ state: state, hiddenCount: hiddenCount, reason: reason });
@@ -33,6 +34,7 @@
     async function status(msg, sender) {
       var tabId = sender && sender.tab ? sender.tab.id : undefined;
       if (tabId === undefined) return { ok: false, error: 'no-tab' };
+      tabStates.set(tabId, { state: msg.state, hiddenCount: msg.hiddenCount || 0, reason: msg.reason });
       paint(tabId, msg.state, msg.hiddenCount, msg.reason);
       return { ok: true };
     }
@@ -84,11 +86,23 @@
       if (type === 'gdh:set-paused') return { ok: true, config: await config.setPaused(msg.hostKey, !!msg.paused) };
       if (type === 'gdh:add-host') return addHost(msg.url);
       if (type === 'gdh:forget-host') return { ok: true, config: await config.removeHost(msg.id) };
+      if (type === 'gdh:tab-state') {
+        return { ok: true, tab: tabStates.get(msg.tabId) || { state: 'idle', hiddenCount: 0 } };
+      }
+      if (type === 'gdh:export-config') return { ok: true, json: await config.exportJson() };
+      if (type === 'gdh:import-config') {
+        try {
+          return { ok: true, config: await config.importJson(msg.json) };
+        } catch (e) {
+          return { ok: false, error: 'invalid' };
+        }
+      }
       return { ok: false, error: 'unknown-message' };
     }
 
     async function onUpdated(tabId, changeInfo) {
       if (!changeInfo || changeInfo.status !== 'loading') return;
+      tabStates.delete(tabId);
       paint(tabId, 'idle', 0);
     }
 
