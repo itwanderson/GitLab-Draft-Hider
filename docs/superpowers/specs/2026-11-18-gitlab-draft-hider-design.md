@@ -17,17 +17,21 @@ tracked in someone's head. It works on a project's Merge requests page and
 on a group's Merge requests page (which covers subgroups, and is how the
 mono repo and the wider team area are viewed).
 
-Two modes, one behaviour, no credentials:
+One behaviour, two data sources, no credentials:
 
-- **Base mode** — no setup. Reads the rows already on the page. Only sees
-  the MRs on the current page (20 by default), so it is a good default and
-  an incomplete one.
-- **Enhanced mode** — asks GitLab for every open MR in the project or group
-  through the browser session you are already signed in with. Hiding, the
-  Hidden tab and the counts are then correct across all pages.
+- **The page's rows** — read immediately, on first paint. Only the MRs on the
+  page (20 by default), so honest but incomplete: it is what you get signed
+  out, what hides drafts before anything else has answered, and the fallback
+  when the query below cannot answer.
+- **The session query** — asks GitLab for every open MR in the project or
+  group through the browser session you are already signed in with. Hiding,
+  the Hidden tab and the counts are then correct across all pages.
 
-Base mode is always on. Enhanced mode switches itself on when the request
-succeeds. The same classifier decides what is hidden in both.
+There is no mode to choose. The session query is attempted on every list view;
+when it answers, its answer wins and the page-derived marks are reconciled to
+it. When it cannot answer — signed out, session expired, instance refused,
+schema moved — the extension keeps the page-derived result and says so in one
+line in the panel. The same classifier decides what is hidden in both.
 
 **There is no token, no key, and no secret to store.** See "Security".
 
@@ -37,10 +41,10 @@ succeeds. The same classifier decides what is hidden in both.
   group Merge requests list.
 - A **Hidden** tab beside Open / Merged / Closed / All lists everything that
   was removed, with the reason (draft, or which label), each linking to the MR.
-- Base mode works with no configuration.
-- Enhanced mode is complete: all pages, correct counts, reasons for MRs that
-  are not on the current page, and it respects the filters the user has
-  applied to the list.
+- Works with no configuration, from the page's own rows, on first paint.
+- When the session query answers, it is complete: all pages, correct counts,
+  reasons for MRs that are not on the current page, and it respects the
+  filters the user has applied to the list.
 - The label list is editable in one place, works across projects and groups,
   and can be exported/imported so a team can share one config.
 - The extension never breaks the page. Any failure fails open — MRs visible
@@ -112,7 +116,8 @@ storage for no gain. See "Security".
 ## Decisions taken with the user
 
 - Both surfaces: project and group MR lists.
-- Both modes, as above.
+- Both data sources: the page's rows always, the session query whenever it
+  answers.
 - Secret handling: a leaked key would be problematic, so there is no key.
 
 ## Decisions taken by the builder (check these)
@@ -125,8 +130,8 @@ storage for no gain. See "Security".
    declares a content script for `https://gitlab.com/*` only — the install
    warning names one site, not every site. Any other GitLab is added in
    settings, which requests that origin (optionally a path prefix) and
-   registers a content script at runtime. This is what makes base mode work
-   out of the box without `<all_urls>`.
+   registers a content script at runtime. This is what makes the
+   out-of-box case work without `<all_urls>`.
 3. **Hide by MR identity, not by class.** Identity is
    `(project full path, iid)`, both taken from the row's link
    (`…/<project>/-/merge_requests/<iid>`). In a group list `!12` exists in
@@ -157,23 +162,28 @@ storage for no gain. See "Security".
 7. **Reason model:** `draft` (boolean), `labels` (names that matched), both
    may apply. Shown as chips in the Hidden tab; the row is hidden if either
    is true.
-8. **Base mode is limited and says so:** tab label `Hidden (3)`, plus "Only
-   MRs on this page can be found right now. Reload in enhanced mode for the
-   full list." Enhanced mode shows the whole set, including MRs not on the
-   current page.
-9. **Count correction in enhanced mode only**, on the Open tab, subtracting
-   the hidden open MRs from the Open count text. Re-applied idempotently
-   after re-render. Base mode leaves GitLab's numbers alone.
+8. **Degraded is a state, not a setting.** There is no mode switch. The panel
+   shows a status line only when the session query did not produce the answer:
+   "Signed out — showing the MRs on this page only" or "GitLab didn't answer —
+   showing the MRs on this page only", with a retry link. Success is cached for
+   60 s; failure is not cached across navigations, so signing in and clicking
+   the list again is enough. The tab label stays `Hidden (n)` either way, so
+   nothing shouts at someone reading a public project signed out.
+9. **Count correction only from the session answer**, on the Open tab,
+   subtracting the hidden open MRs from the Open count text. Re-applied
+   idempotently after re-render. Page-derived hiding leaves GitLab's numbers
+   alone.
 10. **Empty and failure states:** "Nothing hidden — the queue is all ready
     work." A failed GraphQL call (session expired, schema change, 403) falls
-    back to base mode for that view with a one-line note, and never hides
+    back to the page's own rows for that view with a one-line note, and never hides
     more than the page shows.
 11. **Config is local and shareable by JSON.** Label list and toggles in
     `chrome.storage.local`; export/import of labels and toggles only. No
     secrets exist to export.
-12. **Popup is a status strip**: mode, host, hidden count for the current
-    tab, a pause toggle for this host, an "Enable on this GitLab" action when
-    the current host is not yet granted, and a link to settings.
+12. **Popup is a status strip**: the current source ("full list" or "this page
+    only" with the reason), host, hidden count for the current tab, a pause
+    toggle for this host, an "Enable on this GitLab" action when the current
+    host has not been granted, and a link to settings.
 13. **Defaults:** draft hiding on; label list empty, with one-click
     suggestions (`dependencies`, `do-not-merge`, `skip-review`, `on-hold`).
     Shipping a preselected `dependencies` would hide MRs on first run that
@@ -222,9 +232,9 @@ GitLab MR list page (project or group)
   │    • is this a MR list URL?  <prefix>/<scope>/-/merge_requests   (else idle)
   │    • parse scope kind, scope path, and the active filters from the URL
   │    • find rows, derive (project path, iid) from each row's link
-  │    • base mode: read draft/labels from the DOM
-  │    • enhanced: POST the GraphQL query with the page session
-  │    • classify, hide rows, fix the Open count, render the Hidden tab
+  │    • page rows: hide matching rows now, from draft/labels in the DOM
+  │    • session query: POST GraphQL with the page session, then reconcile
+  │      the marks to the full set, fix the Open count, render the tab
   │    • re-run on Turbo/Vue navigation and (debounced) DOM re-render
   │
   └─ service worker
@@ -280,13 +290,13 @@ pair from the row's href, so the two sides meet without a lookup table.
 - Row element: walk up until an element that also contains the row's title
   text and is a `li`/`div[role="listitem"]`, stopping after 8 ancestors.
   Give up quietly if nothing matches.
-- Base-mode draft signal: title text matches
+- Page-derived draft signal: title text matches
   `/^\s*(\[draft\]|\(draft\)|draft:|wip:|\[wip\]|\(wip\))/i`, or the row
   contains a badge whose text is exactly `Draft`.
-- Base-mode label signal: text of label chips in the row, matched against the
-  configured labels. Chips are found by `[data-testid*="label"], .gl-label,
+- Page-derived label signal: text of label chips in the row, matched against
+  the configured labels. Chips are found by `[data-testid*="label"], .gl-label,
   .issuable-label`; truncated chips ("+2") are ignored, which is one of the
-  reasons base mode is approximate.
+  reasons this source is approximate.
 - Hidden tab button: appended to the tab bar found by locating the element
   containing links whose URLs carry `state=opened` and `state=merged`. If no
   tab bar is found, render a standalone bar above the list instead.
@@ -306,14 +316,14 @@ for this filter". `page`/`sort`/`state` are irrelevant to the query.
 
 ## Settings (options page)
 
-1. **What this does** — two lines, and the current mode (base or enhanced) with
-   a one-line reason if enhanced is not available ("not signed in on this
-   host", "this GitLab did not answer").
+1. **What this does** — two lines, and the current source: "Reading the full
+   list through your GitLab session", or "Reading this page only — signed
+   out" / "— GitLab didn't answer", with a retry.
 2. **Hide drafts** — toggle, on by default.
 3. **Labels that mean "not ready"** — chip input, add/remove, suggestion
    buttons. Help text: matches the label name exactly, ignoring case.
 4. **GitLab hosts** — one card per host: URL (may include a path prefix),
-   grant/re-grant access, remove, and whether enhanced mode works there.
+   grant/re-grant access, remove, and whether the session query answers there.
    Adding asks for permission to that origin on click.
 5. **How this works without a token** — two sentences: it uses the session
    you are already signed in with, read-only, nothing stored. (This is where
@@ -354,9 +364,9 @@ available; otherwise its pure parts (identity extraction from a URL) live in
 - **GitLab markup changes.** Identity-anchored row lookup, no class dependency,
   fail open, console warning instead of a broken page.
 - **GitLab GraphQL schema changes.** Ten fields, all long-standing and used by
-  GitLab's own UI. A failure degrades to base mode for that view; it never
+  GitLab's own UI. A failure degrades to the page's own rows for that view; it never
   breaks the page. The queries are isolated in one file so a fix is local.
-- **Session expiry.** GraphQL returns 401/redirect; we fall back to base mode
+- **Session expiry.** GraphQL returns 401/redirect; we fall back to the page's own rows
   and say so. Signing in again fixes it.
 - **Rate limits / big mono repo.** 100 per page, 10 pages, 60 s cache, refresh
   button, explicit "showing first 1000" note.
@@ -366,10 +376,13 @@ available; otherwise its pure parts (identity extraction from a URL) live in
 - **Subpath installs.** Explicit base URL with path prefix; permission pattern
   includes it; a wrong prefix fails visibly ("this GitLab did not answer")
   rather than as a 404 that looks like a permission problem.
-- **Both modes disagreeing.** The Hidden tab is built from the same set we hid,
-  so it cannot omit something hidden. In enhanced mode we hide by identity
-  from the API; rows the page has but the API did not return (just-created MR)
-  are hidden by the base-mode classifier as a backstop only if they match.
+- **Both sources disagreeing.** The page-derived marks go on first, then the
+  session answer replaces them; marks are reconciled by identity, not
+  appended, and a row the API did not mention is un-marked only if the
+  page-derived signal no longer matches. Nothing hidden is ever left out of
+  the tab, because the tab is built from the same set that was hidden.
+- **Drafts flashing on first paint.** Hidden from the page's own rows
+  immediately, before any request is made.
 
 ## Testing
 
@@ -378,10 +391,11 @@ available; otherwise its pure parts (identity extraction from a URL) live in
   URL parsing (project vs group, subgroup paths, subpath install, filters,
   `/-/merge_requests` only), identity extraction (`path + iid`), and the
   count subtraction.
-- Manual matrix in `README.md`: project list, group list, subgroup list, base
-  mode, enhanced mode, signed out, 100+ MRs, filters applied, All tab,
-  Merged/Closed tabs untouched, light/dark theme, keyboard use of the tab,
-  page reload and in-app navigation, self-hosted subpath install.
+- Manual matrix in `README.md`: project list, group list, subgroup list, signed
+  in (full list), signed out (page only), forced GraphQL failure, 100+ MRs,
+  filters applied, All tab, Merged/Closed tabs untouched, light/dark theme,
+  keyboard use of the tab, page reload and in-app navigation, self-hosted
+  subpath install.
 
 ## Future (not in this build)
 
