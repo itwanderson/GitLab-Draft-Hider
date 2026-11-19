@@ -49,6 +49,8 @@ line in the panel. The same classifier decides what is hidden in both.
   and can be exported/imported so a team can share one config.
 - The extension never breaks the page. Any failure fails open — MRs visible
   rather than wrongly hidden.
+- The toolbar icon says, at a glance, whether this tab is showing the full list
+  or only this page, without opening anything.
 
 ## Non-goals
 
@@ -192,6 +194,10 @@ storage for no gain. See "Security".
     GitLab's label names. `dependencies` does not match `dependencies-java`.
 15. **Bound the paging:** follow `pageInfo.hasNextPage` up to 10 pages (1000
     MRs). Beyond that, stop, keep what we have, and say so in the panel.
+16. **The icon distinguishes the two sources by shape, not only colour** — see
+    "Toolbar icon". Amber is the only accent used for "page only", so it reads
+    as a caution rather than an error, and the count badge is identical in both
+    working states.
 
 ## Security
 
@@ -314,6 +320,35 @@ in the map (`label_name[]`, `author_username`, `assignee_username`,
 "unknown": hide from the enhanced set but label the panel "counts not adjusted
 for this filter". `page`/`sort`/`state` are irrelevant to the query.
 
+## Toolbar icon
+
+The icon is per tab (`chrome.action.setIcon({ tabId })`), because the answer is
+per tab: one tab can be signed in and another a public project signed out.
+
+Shape carries the state so it survives greyscale and colour blindness; colour
+and the badge reinforce it.
+
+| State | Glyph | Badge | Tooltip |
+| --- | --- | --- | --- |
+| Full list (session answered) | funnel filled, accent colour | hidden count | "GitLab Draft Hider — full list, 5 hidden" |
+| This page only (signed out / query failed) | funnel outlined, lower third filled amber | hidden count on grey | "GitLab Draft Hider — this page only: signed out" |
+| Paused here | funnel with a slash, muted | none | "GitLab Draft Hider — paused on this GitLab" |
+| Not a MR list, or host not enabled | hollow funnel, muted | none | "GitLab Draft Hider — open a Merge requests list" |
+
+- Badge text is the hidden count, capped at `99+`; it is the same in both
+  working states, so the count never competes with the state. Counting only
+  makes sense on a list page, which is exactly where the badge appears.
+- Assets are static PNGs at 16 and 32 px per state, plus 48/128 for the
+  extensions page — no runtime drawing, no canvas, no build step.
+- The content script reports state to the service worker
+  (`gdh:status {state, hiddenCount}`) on init, whenever the source changes, and
+  on `pagehide`. The service worker also clears the tab's badge on
+  `tabs.onUpdated` with `status: "loading"`, so a tab that navigates to a page
+  where we are not injected does not keep a stale count.
+- Nothing in the icon is a control. Clicking opens the popup, which repeats the
+  state as a sentence and offers the action ("Sign in", "Retry", "Enable on
+  this GitLab", "Resume here").
+
 ## Settings (options page)
 
 1. **What this does** — two lines, and the current source: "Reading the full
@@ -337,7 +372,9 @@ for this filter". `page`/`sort`/`state` are irrelevant to the query.
 ```
 manifest.json
 README.md
-icons/icon16.png icon32.png icon48.png icon128.png
+icons/icon-16-{idle,full,page,paused}.png
+icons/icon-32-{idle,full,page,paused}.png
+icons/icon-48.png icons/icon-128.png
 src/lib/classify.js          pure classifier + label/draft matching (dual-use)
 src/lib/hosts.js             base URL/prefix, scope + filter parsing, URL builders
 src/lib/graphql.js           query documents, response mapping, error mapping
@@ -383,6 +420,9 @@ available; otherwise its pure parts (identity extraction from a URL) live in
   the tab, because the tab is built from the same set that was hidden.
 - **Drafts flashing on first paint.** Hidden from the page's own rows
   immediately, before any request is made.
+- **Stale icon on a tab we no longer run in.** Per-tab state is cleared on
+  navigation start and re-reported by the content script; the icon is never
+  the only place a state can be read.
 
 ## Testing
 
@@ -395,7 +435,7 @@ available; otherwise its pure parts (identity extraction from a URL) live in
   in (full list), signed out (page only), forced GraphQL failure, 100+ MRs,
   filters applied, All tab, Merged/Closed tabs untouched, light/dark theme,
   keyboard use of the tab, page reload and in-app navigation, self-hosted
-  subpath install.
+  subpath install, and the icon in all four states (including greyscale).
 
 ## Future (not in this build)
 
