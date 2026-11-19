@@ -12,8 +12,8 @@ const base = { origin: 'https://gitlab.com', prefix: '' };
 const html = readFileSync(new URL('./fixtures/list.html', import.meta.url), 'utf8');
 
 const setup = () => {
-  const { document } = parseHTML(html);
-  return { doc: document, rows: D.createRows(document, base) };
+  const { document, window } = parseHTML(html);
+  return { doc: document, window, rows: D.createRows(document, base) };
 };
 
 test('reads one row per iid with identity and signals', () => {
@@ -73,4 +73,31 @@ test('renders hidden items with their reasons and an empty state', () => {
   assert.match(panel.node.textContent, /Draft/);
   panel.setItems([]);
   assert.match(panel.node.textContent, /Nothing hidden/);
+});
+
+test('re-resolves the Open count after GitLab re-renders the tab', () => {
+  const { doc } = setup();
+  const count = D.createOpenCount(doc);
+  count.adjust(5);
+  assert.match(doc.querySelector('a[href*="state=opened"]').textContent, /32/);
+  const old = doc.querySelector('a[href*="state=opened"]');
+  const fresh = doc.createElement('a');
+  fresh.setAttribute('href', '?state=opened');
+  fresh.textContent = 'Open 37';
+  old.parentNode.replaceChild(fresh, old);
+  count.adjust(5);
+  assert.match(doc.querySelector('a[href*="state=opened"]').textContent, /32/);
+});
+
+test('a degraded status can carry a retry action', () => {
+  const { doc, window } = setup();
+  const panel = D.createPanel(doc);
+  let retried = 0;
+  panel.setStatus('Signed out — showing the MRs on this page only', () => { retried += 1; });
+  const retry = panel.node.querySelector('#gdh-retry');
+  assert.ok(retry, 'retry button');
+  retry.dispatchEvent(new window.Event('click'));
+  assert.equal(retried, 1);
+  panel.setStatus(null);
+  assert.equal(panel.node.querySelector('#gdh-retry'), null);
 });

@@ -7,7 +7,7 @@
   var LIST_SUFFIX = /\/-\/merge_requests\/?$/;
   var DETAIL_SUFFIX = /\/-\/merge_requests\/(\d+)\/?$/;
   var STATES = ['opened', 'all', 'merged', 'closed', 'locked'];
-  var SCOPES = ['created_by_me', 'assigned_to_me', 'reviews_for_me'];
+  var SCOPES = ['all', 'created_by_me', 'assigned_to_me', 'reviews_for_me'];
   // Query keys that do not change which MRs the list contains.
   var IGNORED_KEYS = ['state', 'sort', 'page', 'per_page', 'utf8', 'nav_source'];
   var FILTER_KEYS = [
@@ -81,6 +81,8 @@
       unknown.push('scope');
       scopeValue = null;
     }
+    // GitLab's own filter form serialises scope=all; that is "no scope filter".
+    if (scopeValue === 'all') scopeValue = null;
     var draftValue = params.get('draft');
     if (draftValue !== null && draftValue !== 'yes' && draftValue !== 'no') {
       unknown.push('draft');

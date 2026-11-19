@@ -9,18 +9,28 @@ loadGlobal('iconState.js', 'GDHIcons');
 const core = loadGlobal('../background/serviceWorkerCore.js', 'GDHServiceWorker');
 
 const fakes = () => {
-  const calls = { icon: [], badge: [], color: [], title: [], registered: [], unregistered: [] };
+  const calls = { icon: [], badge: [], color: [], title: [], registered: [], unregistered: [], messages: [] };
   let box = {};
+  const sessionBox = {};
   return {
     calls,
     area: { get: async () => ({ ...box }), set: async (o) => { box = { ...box, ...o }; } },
+    session: {
+      get: async (key) => ({ [key]: sessionBox[key] }),
+      set: async (o) => { Object.assign(sessionBox, o); },
+      remove: async (key) => { delete sessionBox[key]; },
+    },
     action: {
       setIcon: (o) => calls.icon.push(o),
       setBadgeText: (o) => calls.badge.push(o),
       setBadgeBackgroundColor: (o) => calls.color.push(o),
       setTitle: (o) => calls.title.push(o),
     },
-    tabs: { onUpdated: { addListener() {} }, query: async () => [] },
+    tabs: {
+      onUpdated: { addListener() {} },
+      query: async () => [{ id: 11 }],
+      sendMessage: async (id, msg) => { calls.messages.push({ id, msg }); },
+    },
     permissions: { onRemoved: { addListener() {} } },
     scripting: {
       registerContentScripts: async (o) => calls.registered.push(o),
@@ -123,4 +133,42 @@ test('pause and config round-trip through the worker', async () => {
   assert.deepEqual(paused.config.pausedHosts, ['https://gitlab.com']);
   const labels = await h.onMessage({ type: 'gdh:add-label', name: 'dependencies' }, { id: 'self' });
   assert.deepEqual(labels.config.labels, ['dependencies']);
+});
+
+test('tab state survives a service worker restart', async () => {
+  const f = fakes();
+  await core.createHandlers(f).onMessage(
+    { type: 'gdh:status', state: 'full', hiddenCount: 5 }, { tab: { id: 7 }, id: 'self' });
+  // A new handler set is what a restarted worker looks like: module state is gone.
+  const restarted = core.createHandlers(f);
+  const r = await restarted.onMessage({ type: 'gdh:tab-state', tabId: 7 }, { id: 'self' });
+  assert.deepEqual(r.tab, { state: 'full', hiddenCount: 5, reason: undefined });
+});
+
+test('pausing broadcasts a refresh to open tabs', async () => {
+  const f = fakes();
+  const h = core.createHandlers(f);
+  await h.onMessage({ type: 'gdh:set-paused', hostKey: 'https://gitlab.com', paused: true }, { id: 'self' });
+  assert.deepEqual(f.calls.messages.at(-1), { id: 11, msg: { type: 'gdh:refresh' } });
+});
+
+test('forget-host unregisters the dynamic script, and re-adding works', async () => {
+  const f = fakes();
+  const h = core.createHandlers(f);
+  await h.onMessage({ type: 'gdh:add-host', url: 'https://example.com/gitlab' }, { id: 'self' });
+  const r = await h.onMessage({ type: 'gdh:forget-host', id: 'gdh-https-example-com-gitlab' }, { id: 'self' });
+  assert.deepEqual(f.calls.unregistered.at(-1), { ids: ['gdh-https-example-com-gitlab'] });
+  assert.deepEqual(r.config.hosts, []);
+  const again = await h.onMessage({ type: 'gdh:add-host', url: 'https://example.com/gitlab' }, { id: 'self' });
+  assert.equal(again.ok, true);
+  assert.equal(f.calls.registered.at(-1)[0].id, 'gdh-https-example-com-gitlab');
+});
+
+test('gitlab.com is built in and never registered dynamically', async () => {
+  const f = fakes();
+  const h = core.createHandlers(f);
+  const r = await h.onMessage({ type: 'gdh:add-host', url: 'https://gitlab.com' }, { id: 'self' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.config.hosts, []);
+  assert.equal(f.calls.registered.length, 0);
 });

@@ -16,6 +16,7 @@ const handlers = GDHServiceWorker.createHandlers({
   scripting: chrome.scripting,
   runtime: chrome.runtime,
   area: chrome.storage.local,
+  session: chrome.storage.session,
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {

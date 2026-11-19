@@ -19,7 +19,7 @@
   var observer = null;
   var timer = null;
 
-  var ui = { doc: null, rows: null, panel: null, tab: null, count: null, base: null, parsed: null, config: null };
+  var ui = { doc: null, rows: null, panel: null, tab: null, count: null, base: null, parsed: null, config: null, countDelta: 0 };
   var lastHide = new Set();
   var lastItems = [];
 
@@ -68,7 +68,7 @@
       var rows = ui.rows.read();
       for (var i = 0; i < rows.length; i++) rows[i].el.removeAttribute('data-gdh-hidden');
     }
-    ui = { doc: null, rows: null, panel: null, tab: null, count: null, base: null, parsed: null, config: null };
+    ui = { doc: null, rows: null, panel: null, tab: null, count: null, base: null, parsed: null, config: null, countDelta: 0 };
     lastHide = new Set();
     lastItems = [];
   }
@@ -87,6 +87,12 @@
       onSelect: function () { ui.panel.show(); },
       onUnselect: function () { ui.panel.hide(); },
     });
+  }
+
+  function applyCount() {
+    if (!ui.count) return;
+    if (ui.countDelta) ui.count.adjust(ui.countDelta);
+    else ui.count.reset();
   }
 
   function showPagePass(page) {
@@ -145,14 +151,13 @@
     if (ui.tab) ui.tab.setCount(lastItems.length);
 
     var adjusts = parsed.state === null || parsed.state === 'opened';
-    if (ui.count) {
-      if (adjusts) ui.count.adjust(merged.countDelta);
-      else ui.count.reset();
-    }
+    ui.countDelta = adjusts ? merged.countDelta : 0;
+    applyCount();
     if (ui.panel) {
-      if (session.truncated) ui.panel.setStatus('Showing the first 1,000 merge requests.');
-      else if (parsed.unknownFilters.length) ui.panel.setStatus('Hidden counts are not adjusted for the filters in this URL.');
-      else ui.panel.setStatus(null);
+      var notes = [];
+      if (session.truncated) notes.push('Showing the first 1,000 merge requests.');
+      if (parsed.unknownFilters.length) notes.push('Hidden counts are not adjusted for the filters in this URL.');
+      ui.panel.setStatus(notes.join(' ') || null, function () { boot(); });
     }
     report(deps, 'full', lastItems.length);
   }
@@ -204,10 +209,11 @@
     if (session.ok) {
       renderFull(deps, page, session, parsed, cfg);
     } else {
+      ui.countDelta = 0;
       if (ui.panel) {
         ui.panel.setStatus(session.reason === 'signed-out'
           ? 'Signed out — showing the MRs on this page only.'
-          : "GitLab didn't answer — showing the MRs on this page only.");
+          : "GitLab didn't answer — showing the MRs on this page only.", function () { boot(); });
       }
       if (ui.count) ui.count.reset();
       report(deps, 'page', lastItems.length, session.reason === 'signed-out' ? 'signed-out' : 'error');
@@ -220,31 +226,40 @@
       timer = null;
       if (typeof location === 'undefined') return;
       if (location.href !== lastHref) {
-        boot();
+        boot().catch(function () {});
         return;
       }
       applyMarks(lastHide);
+      applyCount();
       if (ui.panel && !document.getElementById('gdh-panel')) boot();
     }, BOOT_DELAY);
   }
 
   function start() {
-    root.GDHRun = {
-    boot: boot,
-    clearCache: function () { cache.clear(); myUsername = null; },
-    get lastItems() { return lastItems; },
-  };
-    boot();
+    boot().catch(function () { report(baseEnvironment(), 'idle'); });
     if (!observer && typeof MutationObserver !== 'undefined') {
       observer = new MutationObserver(schedule);
       observer.observe(document.body, { childList: true, subtree: true });
     }
     window.addEventListener('popstate', schedule);
-    window.addEventListener('pagehide', function () { send({ type: 'gdh:status', state: 'idle', hiddenCount: 0 }); });
+    window.addEventListener('pagehide', function () {
+      send({ type: 'gdh:status', state: 'idle', hiddenCount: 0 });
+    });
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener(function (message) {
+        if (message && message.type === 'gdh:refresh') boot().catch(function () {});
+      });
+    }
+  }
+
+  function reapply() {
+    applyMarks(lastHide);
+    applyCount();
   }
 
   root.GDHRun = {
     boot: boot,
+    reapply: reapply,
     clearCache: function () { cache.clear(); myUsername = null; },
     get lastItems() { return lastItems; },
   };

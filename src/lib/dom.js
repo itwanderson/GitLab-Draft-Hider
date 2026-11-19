@@ -113,25 +113,40 @@
   }
 
   function createOpenCount(doc) {
-    var link = doc.querySelector('a[href*="state=opened"]');
-    var node = digitsNode(link);
-    var original = node ? (node.nodeValue.match(/\d+/) || ['0'])[0] : null;
-    var base = original === null ? 0 : Number(original);
+    function current() {
+      var el = doc.querySelector('a[href*="state=opened"]');
+      if (!el) return null;
+      var node = digitsNode(el);
+      return node ? { el: el, node: node } : null;
+    }
 
-    function render(value) {
-      if (!node) return;
-      node.nodeValue = node.nodeValue.replace(/\d+/, String(Math.max(0, value)));
+    function baseFor(found) {
+      if (!found.el.hasAttribute('data-gdh-base-count')) {
+        var match = (found.node.nodeValue || '').match(/\d+/);
+        found.el.setAttribute('data-gdh-base-count', match ? match[0] : '0');
+      }
+      return Number(found.el.getAttribute('data-gdh-base-count'));
+    }
+
+    // Resolved on every call: GitLab re-renders its tab bar, and a snapshot taken
+    // at mount would either hit nothing or hold a stale node forever.
+    function render(delta) {
+      var found = current();
+      if (!found) return;
+      var base = baseFor(found);
+      found.node.nodeValue = found.node.nodeValue.replace(/\d+/, String(Math.max(0, base - delta)));
     }
 
     return {
       adjust: function (delta) {
-        render(base - Math.max(0, Number(delta) || 0));
+        render(Math.max(0, Number(delta) || 0));
       },
       reset: function () {
-        render(base);
+        render(0);
       },
       base: function () {
-        return base;
+        var found = current();
+        return found ? baseFor(found) : null;
       },
     };
   }
@@ -203,9 +218,21 @@
     return {
       node: node,
       setItems: setItems,
-      setStatus: function (text) {
+      setStatus: function (text, onRetry) {
         status.hidden = !text;
-        status.textContent = text || '';
+        status.textContent = '';
+        if (!text) return;
+        status.appendChild(doc.createTextNode(text));
+        if (onRetry) {
+          var retry = doc.createElement('button');
+          retry.type = 'button';
+          retry.id = 'gdh-retry';
+          retry.className = 'gdh-retry';
+          retry.textContent = 'Retry';
+          retry.addEventListener('click', onRetry);
+          status.appendChild(doc.createTextNode(' '));
+          status.appendChild(retry);
+        }
       },
       show: function () {
         node.hidden = false;

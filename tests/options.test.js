@@ -8,7 +8,7 @@ const { document } = parseHTML(html);
 
 test('has every control the settings page needs', () => {
   for (const id of ['hide-drafts', 'label-input', 'add-label', 'labels', 'host-url',
-    'add-host', 'hosts', 'export', 'import-file', 'notice', 'pause']) {
+    'add-host', 'hosts', 'export', 'import-file', 'notice', 'pause', 'source', 'retry']) {
     assert.ok(document.getElementById(id), id);
   }
 });

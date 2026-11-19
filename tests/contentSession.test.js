@@ -120,3 +120,24 @@ test('reports signed out when the page has no CSRF token', async () => {
   assert.equal(sent.at(-1).reason, 'signed-out');
   assert.match(document.getElementById('gdh-panel').textContent, /Signed out/);
 });
+
+test('re-applies the corrected count after GitLab re-renders the tab bar', async () => {
+  const { document, deps } = setup();
+  await run.boot(deps);
+  assert.match(document.querySelector('a[href*="state=opened"]').textContent, /35/);
+  const old = document.querySelector('a[href*="state=opened"]');
+  const fresh = document.createElement('a');
+  fresh.setAttribute('href', '?state=opened');
+  fresh.textContent = 'Open 37';
+  old.parentNode.replaceChild(fresh, old);
+  run.reapply();
+  assert.match(document.querySelector('a[href*="state=opened"]').textContent, /35/);
+});
+
+test('offers a retry in the panel when degraded', async () => {
+  const { document, deps } = setup({
+    fetchImpl: async () => ({ ok: false, status: 500, headers: new Map([['content-type', 'text/html']]), text: async () => '' }),
+  });
+  await run.boot(deps);
+  assert.ok(document.getElementById('gdh-retry'));
+});

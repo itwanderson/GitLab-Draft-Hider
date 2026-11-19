@@ -39,6 +39,13 @@ test('maps filters and flags the ones it does not understand', () => {
   assert.deepEqual(r.unknownFilters, ['timeframe']);
 });
 
+test('treats scope=all as understood, not as an unknown filter', () => {
+  const base = { origin: 'https://gitlab.com', prefix: '' };
+  const r = H.parseListUrl('https://gitlab.com/g/p/-/merge_requests?state=opened&scope=all', base);
+  assert.equal(r.filters.scope, null);
+  assert.deepEqual(r.unknownFilters, []);
+});
+
 test('resolves the base for a page from the configured hosts', () => {
   const hosts = [{ url: 'https://example.com/gitlab' }, { url: 'https://example.com/gitlab/deep' }];
   assert.deepEqual(H.resolveBase('https://example.com/gitlab/deep/g/p/-/merge_requests', hosts),

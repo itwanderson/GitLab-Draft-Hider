@@ -14,7 +14,7 @@ test('has a status line and the three actions', () => {
 
 test('loads its library and script, with no inline handlers', () => {
   const srcs = [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'));
-  assert.deepEqual(srcs, ['../lib/hosts.js', 'popup.js']);
+  assert.deepEqual(srcs, ['../lib/hosts.js', '../lib/popupState.js', 'popup.js']);
   for (const s of srcs) assert.ok(existsSync(new URL(`../src/popup/${s}`, import.meta.url)), s);
   assert.equal(html.includes('onclick='), false);
 });

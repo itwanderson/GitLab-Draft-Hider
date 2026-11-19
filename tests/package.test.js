@@ -21,5 +21,6 @@ test('the workflow tests, packages, and attaches a release asset on tags', () =>
   assert.match(yml, /npm test/);
   assert.match(yml, /actions\/upload-artifact@v4/);
   assert.match(yml, /softprops\/action-gh-release@v2/);
+  assert.match(yml, /permissions:\s*\n\s*contents:\s*write/);
   assert.match(yml, /tags:\s*\n\s*-\s*'?v\*'?/);
 });

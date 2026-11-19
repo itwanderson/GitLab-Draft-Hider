@@ -88,14 +88,33 @@
         url.textContent = host.url;
         var meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = host.builtIn ? 'always enabled' : 'enabled';
+        meta.textContent = host.builtIn ? 'always enabled' : 'checking access…';
         left.appendChild(url);
         left.appendChild(meta);
         card.appendChild(left);
         if (!host.builtIn) {
-          card.appendChild(button('Remove', function () {
-            removeHost(host);
-          }));
+          var actions = document.createElement('div');
+          actions.className = 'row';
+          var base = GDHHosts.normalizeBaseUrl(host.url);
+          if (base && chrome.permissions && chrome.permissions.contains) {
+            chrome.permissions.contains({ origins: [GDHHosts.matchPattern(base)] }).then(function (granted) {
+              meta.textContent = granted ? 'access granted' : 'access missing';
+              if (!granted) {
+                actions.appendChild(button('Re-grant', function () {
+                  chrome.permissions.request({ origins: [GDHHosts.matchPattern(base)] }).then(function (ok) {
+                    notice(ok ? 'Access granted for ' + host.url + '.' : 'Permission denied.', ok ? 'info' : 'error');
+                    renderHosts();
+                  }, fail);
+                }));
+              }
+            }, function () {
+              meta.textContent = 'access unknown';
+            });
+          } else {
+            meta.textContent = 'enabled';
+          }
+          actions.appendChild(button('Remove', function () { removeHost(host); }));
+          card.appendChild(actions);
         }
         box.appendChild(card);
       })(list[i]);
@@ -137,6 +156,12 @@
     renderLabels();
     renderHosts();
     renderPause();
+  }
+
+  async function load() {
+    var reply = await send({ type: 'gdh:get-config' });
+    config = reply.config;
+    render();
   }
 
   function fail(error) {
@@ -243,6 +268,9 @@
         }, fail);
       });
     }
+    $('retry').addEventListener('click', function () {
+      load().then(function () { notice('Reloaded. The toolbar icon updates from each tab.', 'info'); }, fail);
+    });
     $('add-host').addEventListener('click', addHost);
     $('export').addEventListener('click', exportConfig);
     $('import-file').addEventListener('change', function (event) {
@@ -251,10 +279,7 @@
       event.target.value = '';
     });
 
-    send({ type: 'gdh:get-config' }).then(function (r) {
-      config = r.config;
-      render();
-    }, function (error) {
+    load().catch(function (error) {
       notice('Settings could not load: ' + error.message, 'error');
     });
   }
