@@ -391,10 +391,9 @@ tests/hosts.test.js
 
 `src/lib/classify.js` and `src/lib/hosts.js` are classic scripts that assign
 to `globalThis.GDH…` (content scripts cannot import modules); tests load them
-with `node:vm`, so no build step and no dependencies are needed. `dom.js` is
-tested against fixture HTML via the same trick only if a DOM shim is already
-available; otherwise its pure parts (identity extraction from a URL) live in
-`hosts.js` and are tested there.
+with `node:vm`, so no build step is needed. `dom.js` is tested against fixture
+HTML with `linkedom`, a test-only devDependency; the extension itself has no
+dependencies at runtime.
 
 ## Risks and mitigations
 

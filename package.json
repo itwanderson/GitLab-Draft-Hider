@@ -1,0 +1,14 @@
+{
+  "name": "gitlab-draft-hider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hides draft and parked merge requests on GitLab and shows them in a Hidden tab.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "package": "bash scripts/package.sh dist/gitlab-draft-hider.zip"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.15"
+  }
+}

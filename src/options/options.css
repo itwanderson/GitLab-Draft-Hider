@@ -1,0 +1,214 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 32px 20px 64px;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #ffffff;
+  color: #1f1f1f;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.lede,
+.prose,
+.help {
+  color: #57606a;
+}
+
+.lede {
+  margin: 0 0 24px;
+}
+
+section {
+  padding: 20px 0;
+  border-top: 1px solid #dcdcde;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+#hide-drafts {
+  margin: 0;
+}
+
+input[type="text"],
+input[type="url"] {
+  flex: 1;
+  min-width: 180px;
+  padding: 7px 10px;
+  border: 1px solid #b3b3b3;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+button,
+.buttonish {
+  padding: 7px 12px;
+  border: 1px solid #b3b3b3;
+  border-radius: 6px;
+  background: #f6f6f7;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover,
+.buttonish:hover {
+  background: #ececef;
+}
+
+button:focus-visible,
+input:focus-visible,
+.buttonish:focus-visible {
+  outline: 2px solid #1f75cb;
+  outline-offset: 1px;
+}
+
+.buttonish input {
+  display: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: #ececef;
+}
+
+.chip button {
+  border: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.cards {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.card {
+  border: 1px solid #dcdcde;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card .url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.card .meta {
+  color: #57606a;
+  font-size: 12px;
+}
+
+#notice {
+  position: sticky;
+  bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eaf3ff;
+  border: 1px solid #b6d4fe;
+  color: #0b3a72;
+}
+
+#notice[data-tone="error"] {
+  background: #fff0f0;
+  border-color: #f5c2c0;
+  color: #8b1a1a;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #18191b;
+    color: #ececef;
+  }
+
+  .lede,
+  .prose,
+  .help,
+  .card .meta {
+    color: #b5b5bd;
+  }
+
+  section,
+  .card {
+    border-color: #3f4145;
+  }
+
+  input[type="text"],
+  input[type="url"] {
+    border-color: #5a5b60;
+  }
+
+  button,
+  .buttonish {
+    background: #2a2b2e;
+    border-color: #5a5b60;
+  }
+
+  button:hover,
+  .buttonish:hover {
+    background: #35363a;
+  }
+
+  .chip {
+    background: #2a2b2e;
+  }
+
+  #notice {
+    background: #16243a;
+    border-color: #2c4a75;
+    color: #cfe0f7;
+  }
+
+  #notice[data-tone="error"] {
+    background: #34191a;
+    border-color: #6b2b2b;
+    color: #f3c6c6;
+  }
+}

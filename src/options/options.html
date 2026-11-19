@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GitLab Draft Hider — settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>GitLab Draft Hider</h1>
+      <p class="lede">
+        Hides drafts and parked merge requests from GitLab's merge request lists and keeps them
+        in a Hidden tab, so the list only shows work that is ready.
+      </p>
+
+      <section>
+        <h2>Current source</h2>
+        <p id="source" class="help">The toolbar icon shows this for each tab: a filled funnel is the full list, an amber base means this page only.</p>
+        <div class="row"><button id="retry" type="button">Retry</button></div>
+      </section>
+
+      <section>
+        <h2>Hide drafts</h2>
+        <label class="row" for="hide-drafts">
+          <input type="checkbox" id="hide-drafts">
+          <span>Hide merge requests whose title marks them as a draft</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>Labels that mean "not ready"</h2>
+        <p class="help">Matches the label name exactly, ignoring case. <code>dependencies</code> does not match <code>dependencies-java</code>.</p>
+        <div id="labels" class="chips"></div>
+        <div class="row">
+          <input id="label-input" type="text" placeholder="dependencies" aria-label="Label name">
+          <button id="add-label" type="button">Add label</button>
+        </div>
+        <div id="suggestions" class="row wrap">
+          <button type="button" class="suggest" data-suggestion="dependencies">dependencies</button>
+          <button type="button" class="suggest" data-suggestion="do-not-merge">do-not-merge</button>
+          <button type="button" class="suggest" data-suggestion="skip-review">skip-review</button>
+          <button type="button" class="suggest" data-suggestion="on-hold">on-hold</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>GitLab hosts</h2>
+        <p class="help">gitlab.com is always enabled. Add another GitLab to use this there, including a self-hosted one under a path such as <code>https://example.com/gitlab</code>.</p>
+        <div id="hosts" class="cards"></div>
+        <div class="row">
+          <input id="host-url" type="url" placeholder="https://gitlab.example.com" aria-label="GitLab URL">
+          <button id="add-host" type="button">Add GitLab</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>How this works without a token</h2>
+        <p class="prose">
+          This extension has no token and stores no secret. It reads the merge request list with the
+          GitLab session you are already signed in with, using the same read-only query the page
+          itself uses. It can only read what that page can read, and it can change nothing.
+        </p>
+      </section>
+
+      <section>
+        <h2>Share this configuration</h2>
+        <p class="help">Exports labels and toggles only. Hosts and pauses stay on this computer.</p>
+        <div class="row">
+          <button id="export" type="button">Export JSON</button>
+          <label class="buttonish" for="import-file">Import JSON
+            <input type="file" id="import-file" accept="application/json">
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Pause</h2>
+        <p class="help">Pausing leaves every merge request visible on that GitLab and shows a paused icon.</p>
+        <div id="pause" class="cards"></div>
+      </section>
+
+      <p id="notice" role="status" hidden></p>
+    </main>
+    <script src="../lib/hosts.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

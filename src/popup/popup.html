@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>GitLab Draft Hider</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <p id="status">Checking this tab…</p>
+    <p id="host"></p>
+    <div class="row">
+      <button id="pause" type="button" hidden>Pause here</button>
+      <button id="enable" type="button" hidden>Enable on this GitLab</button>
+      <button id="settings" type="button" class="link">Settings</button>
+    </div>
+    <script src="../lib/hosts.js"></script>
+    <script src="../lib/popupState.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
